@@ -1,0 +1,104 @@
+---
+title: "Data Science Specialization SwiftKey Capstone"
+subtitle: "Week 2 Milestone Report"
+author: "Flavio Oliveri"
+date: "2021/07/27"
+output:
+  html_document:
+    keep_md: false
+---
+
+## Load the data
+
+Download and load the data.
+
+```{r , echo = TRUE}
+zipFile <- "files/Coursera-SwiftKey.zip"
+url <- "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+
+if (!file.exists('files')) {
+    dir.create('files')
+}
+if (!file.exists(zipFile)) {
+    tempFile <- tempfile()
+    download.file(url, zipFile)
+    unlink(tempFile)
+}
+
+if (!file.exists("files/final/en_US")) {
+    unzip(zipFile, exdir = "files")
+}
+
+blogsFile <- "files/final/en_US/en_US.blogs.txt"
+conn <- file(blogsFile, open = "r")
+blogs <- readLines(conn, encoding = "UTF-8", skipNul = TRUE)
+close(conn)
+
+newsFile <- "files/final/en_US/en_US.news.txt"
+conn <- file(newsFile, open = "r")
+news <- readLines(conn, encoding = "UTF-8", skipNul = TRUE)
+close(conn)
+
+twitterFile <- "files/final/en_US/en_US.twitter.txt"
+conn <- file(twitterFile, open = "r")
+twitter <- readLines(conn, encoding = "UTF-8", skipNul = TRUE)
+close(conn)
+
+rm(conn)
+```
+### Files Summary
+
+```{r, echo = FALSE, results = 'hold'}
+library(stringi)
+library(kableExtra)
+
+fileSize <- round(file.info(c(blogsFile, newsFile, twitterFile))$size / 1024 ^ 2)
+numLines <- sapply(list(blogs, news, twitter), length)
+numChars <- sapply(list(nchar(blogs), nchar(news), nchar(twitter)), sum)
+numWords <- sapply(list(blogs, news, twitter), stri_stats_latex)[4,]
+
+
+summary <- data.frame(
+    File = c("en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt"),
+    FileSize = paste(fileSize, " MB"),
+    Lines = numLines,
+    Characters = numChars,
+    Words = numWords
+)
+
+kable(summary, align = c("l", rep("r", 7)), caption = "") %>% kable_styling(position = "left")
+```
+### Histograms
+
+```{r , echo = FALSE, results = 'hold'}
+library(ggplot2)
+library(gridExtra)
+
+
+wpl <- lapply(list(blogs, news, twitter), function(x) stri_count_words(x))
+
+plot1 <- qplot(wpl[[1]],
+               geom = "histogram",
+               main = "Blogs",
+               xlab = "Words per line",
+               ylab = "Frequency",
+               binwidth = 5)
+
+plot2 <- qplot(wpl[[2]],
+               geom = "histogram",
+               main = "News",
+               xlab = "Words per line",
+               ylab = "Frequency",
+               binwidth = 5)
+
+plot3 <- qplot(wpl[[3]],
+               geom = "histogram",
+               main = "Twitter",
+               xlab = "Words per line",
+               ylab = "Frequency",
+               binwidth = 5)
+
+plotList <- list(plot1, plot2, plot3)
+do.call(grid.arrange, c(plotList, list(ncol = 1)))
+
+```
