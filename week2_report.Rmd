@@ -2,11 +2,17 @@
 title: "Data Science Specialization SwiftKey Capstone"
 subtitle: "Week 2 Milestone Report"
 author: "Flavio Oliveri"
-date: "2021/07/27"
+date: "2021/08/02"
 output:
   html_document:
     keep_md: false
 ---
+
+## Introduction
+
+The objective is to explore the datasets that are going to be used to build the prediction model. Basic exploratory analysis of the files and some data preparation like cleaning and sampling are going to be performed.
+
+The idea is to build a corpus based on three files with text extracted from blogs, news and twitter.
 
 ## Load the data
 
@@ -54,51 +60,88 @@ library(kableExtra)
 
 fileSize <- round(file.info(c(blogsFile, newsFile, twitterFile))$size / 1024 ^ 2)
 numLines <- sapply(list(blogs, news, twitter), length)
-numChars <- sapply(list(nchar(blogs), nchar(news), nchar(twitter)), sum)
 numWords <- sapply(list(blogs, news, twitter), stri_stats_latex)[4,]
+numChars <- sapply(list(nchar(blogs), nchar(news), nchar(twitter)), sum)
 
+wplSummary <- sapply(list(blogs, news, twitter),
+             function(x) summary(stri_count_words(x))[c('Mean', 'Max.')])
+rownames(wplSummary) <- c('WordPerLine Mean', 'WordPerLine Max')
 
 summary <- data.frame(
     File = c("en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt"),
     FileSize = paste(fileSize, " MB"),
     Lines = numLines,
+    Words = numWords,
     Characters = numChars,
-    Words = numWords
+    t(rbind(round(wplSummary)))
 )
 
 kable(summary, align = c("l", rep("r", 7)), caption = "") %>% kable_styling(position = "left")
 ```
-### Histograms
+The first obvious conclusion is that, as expected, Twitter has fewer words per line than News and News less than Blogs.
 
-```{r , echo = FALSE, results = 'hold'}
-library(ggplot2)
-library(gridExtra)
+Also, the size of the files are big so sampling is going to be needed.
+
+## Sampling and cleaning
+
+The three data sets will be sampled at 5% and non ASCII characters will be removed. A new file with the 3 samples will be created.
+
+```{r , echo = TRUE, message = FALSE}
+sampleDataFile <- "files/final/en_US/sample.txt"
+
+percentage <- 0.05
+set.seed(450134)
+sampleBlogs <- sample(blogs, length(blogs) * percentage, replace = FALSE)
+sampleNews <- sample(news, length(news) * percentage, replace = FALSE)
+sampleTwitter <- sample(twitter, length(twitter) * percentage, replace = FALSE)
+sampleBlogs <- iconv(sampleBlogs, "latin1", "ASCII", sub = "")
+sampleNews <- iconv(sampleNews, "latin1", "ASCII", sub = "")
+sampleTwitter <- iconv(sampleTwitter, "latin1", "ASCII", sub = "")
+allSamples <- c(sampleBlogs, sampleNews, sampleTwitter)
+conn <- file(sampleDataFile, open = "w")
+writeLines(allSamples, conn)
+close(conn)
 
 
-wpl <- lapply(list(blogs, news, twitter), function(x) stri_count_words(x))
+```
 
-plot1 <- qplot(wpl[[1]],
-               geom = "histogram",
-               main = "Blogs",
-               xlab = "Words per line",
-               ylab = "Frequency",
-               binwidth = 5)
 
-plot2 <- qplot(wpl[[2]],
-               geom = "histogram",
-               main = "News",
-               xlab = "Words per line",
-               ylab = "Frequency",
-               binwidth = 5)
+## Corpus
 
-plot3 <- qplot(wpl[[3]],
-               geom = "histogram",
-               main = "Twitter",
-               xlab = "Words per line",
-               ylab = "Frequency",
-               binwidth = 5)
+To build the corpus I'm going to apply these transformations:
 
-plotList <- list(plot1, plot2, plot3)
-do.call(grid.arrange, c(plotList, list(ncol = 1)))
+ - Remove URL and email patterns
+ - Remove stop words
+ - Remove numbers
+ - Convert to lowercase
+ - Remove punctuation
 
+The result is going to be saved into disk.
+
+```{r, echo = FALSE, message = FALSE}
+library(tm)
+corpusFile <- "files/final/en_US/corpus.txt"
+
+applyTransformations <- function (aDataset) {
+    docs <- VCorpus(VectorSource(aDataset))
+    toSpace <- content_transformer(function(x, pattern) gsub(pattern, " ", x))
+
+    docs <- tm_map(docs, toSpace, "(f|ht)tp(s?)://(.*)[.][a-z]+")
+    docs <- tm_map(docs, toSpace, "@[^\\s]+")
+    docs <- tm_map(docs, toSpace, "\\b[A-Z a-z 0-9._ - ]*[@](.*?)[.]{1,3} \\b")
+
+    docs <- tm_map(docs, tolower)
+    docs <- tm_map(docs, removeWords, stopwords("english"))
+    docs <- tm_map(docs, removePunctuation)
+    docs <- tm_map(docs, removeNumbers)
+    docs <- tm_map(docs, stripWhitespace)
+    docs <- tm_map(docs, PlainTextDocument)
+    return(docs)
+}
+
+corpus <- applyTransformations(allSamples)
+corpusText <- data.frame(text = unlist(sapply(corpus, '[', "content")), stringsAsFactors = FALSE)
+conn <- file(corpusFile, open = "w")
+writeLines(corpusText$text, conn)
+close(conn)
 ```
